@@ -413,7 +413,7 @@ export default function AgendarConsulta() {
                     Consulta Agendada com Sucesso!
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Entraremos em contacto para confirmar a sua consulta
+                    A sua consulta será confirmada pela nutricionista. Assim que estiver validada, receberá um e-mail de confirmação.
                 </Typography>
 
                 <Paper sx={{ p: 3, textAlign: "left" }}>

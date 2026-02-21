@@ -316,7 +316,14 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
     };
 
     const activeBookings = React.useMemo(
-        () => bookings.filter((b) => b.status !== "cancelled"),
+        () => bookings
+            .filter((b) => b.status !== "cancelled")
+            .sort((a, b) => {
+                const dateA = a.date || "";
+                const dateB = b.date || "";
+                if (dateA !== dateB) return dateA.localeCompare(dateB);
+                return (a.time || "").localeCompare(b.time || "");
+            }),
         [bookings]
     );
 
@@ -776,11 +783,6 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                                                     {b.phone && (
                                                         <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
                                                             • {b.phone}
-                                                        </Typography>
-                                                    )}
-                                                    {b.reason && (
-                                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                            {b.reason}
                                                         </Typography>
                                                     )}
                                                 </Box>
