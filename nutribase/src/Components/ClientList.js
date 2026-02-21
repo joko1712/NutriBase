@@ -640,7 +640,7 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                             </Typography>
                         </Box>
                     ) : (
-                        <Box>
+                        <Box sx={{ maxHeight: 560, overflowY: "auto" }}>
                             {activeBookings.map((b) => {
                                 const status = STATUS_CONFIG[b.status] || STATUS_CONFIG.pending;
                                 const formattedDate = b.date ? dayjs(b.date).format("DD/MM/YYYY") : "-";
