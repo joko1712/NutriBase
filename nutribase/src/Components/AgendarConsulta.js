@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
     Box,
     Button,
@@ -18,11 +19,19 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import "dayjs/locale/pt-br";
 import dayjs from "dayjs";
 import { db } from "../firebase-config";
-import { collection, addDoc, serverTimestamp, doc, getDoc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, getDoc, setDoc } from "firebase/firestore";
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import NativeSelect from "@mui/material/NativeSelect";
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem"
 
 import updateLocale from "dayjs/plugin/updateLocale";
 
@@ -48,19 +57,23 @@ function validateEmail(email) {
 }
 
 export default function AgendarConsulta() {
+    const router = useRouter();
     const [step, setStep] = useState(1);
 
     const [selectedDate, setSelectedDate] = useState(null);
     const [selectedTime, setSelectedTime] = useState("");
 
     const [name, setName] = useState("");
+    const [dateOfBirth, setDateOfBirth] = useState(null);
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
     const [reason, setReason] = useState("");
+    const [tipoConsulta, setTipoConsulta] = useState("");
+    const [checked, setChecked] = useState(false)
 
 
     const [monthData, setMonthData] = useState({});
-    const [loadingMonth, setLoadingMonth] = useState(null); // which month is loading
+    const [loadingMonth, setLoadingMonth] = useState(null);
 
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
@@ -68,7 +81,7 @@ export default function AgendarConsulta() {
     const [calendarMonth, setCalendarMonth] = useState(dayjs());
 
     const fetchMonth = React.useCallback(async (monthKey) => {
-        if (monthData[monthKey] !== undefined) return; // already fetched
+        if (monthData[monthKey] !== undefined) return;
         setLoadingMonth(monthKey);
         try {
             const snap = await getDoc(doc(db, "settings", monthKey));
@@ -93,6 +106,13 @@ export default function AgendarConsulta() {
         const key = calendarMonth.format("YYYY-MM");
         fetchMonth(key);
     }, [calendarMonth]);
+
+    useEffect(() => {
+        if (step === 3) {
+            const timer = setTimeout(() => router.push("/"), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [step, router]);
 
     const availableSlots = React.useMemo(() => {
         if (!selectedDate) return [];
@@ -126,22 +146,46 @@ export default function AgendarConsulta() {
 
     const phoneError = validatePhone(phone);
     const emailError = validateEmail(email);
-    const canSubmit = name.trim() !== "" && !emailError && !phoneError && !submitting;
+    const isDateOfBirthValid = dateOfBirth !== null && dateOfBirth.isValid() && dateOfBirth.isBefore(dayjs());
+    const canSubmit = name.trim() !== "" && isDateOfBirthValid && tipoConsulta !== "" && emailError !== "Email inválido" && phoneError !== "Phone inválido" && !submitting && checked == true;
 
+    const handleChange = () => {
+        setChecked(!checked);
+    };
     const handleSubmit = async () => {
         if (!canSubmit) return;
         setSubmitting(true);
         setError("");
         try {
+            const bookedDate = selectedDate.format("YYYY-MM-DD");
             await addDoc(collection(db, "bookings"), {
                 name: name.trim(),
+                dateOfBirth: dateOfBirth ? dateOfBirth.format("YYYY-MM-DD") : "",
                 email: email.trim(),
                 phone: phone.trim(),
                 reason: reason.trim(),
-                date: selectedDate.format("YYYY-MM-DD"),
+                tipoConsulta: tipoConsulta,
+                date: bookedDate,
                 time: selectedTime,
                 createdAt: serverTimestamp(),
             });
+
+            const monthKey = selectedDate.format("YYYY-MM");
+            const settingsRef = doc(db, "settings", monthKey);
+            const snap = await getDoc(settingsRef);
+            if (snap.exists()) {
+                const data = snap.data();
+                const dateSlots = data[bookedDate];
+                if (Array.isArray(dateSlots)) {
+                    const [h, m] = selectedTime.split(":").map(Number);
+                    const totalMin = h * 60 + m + 30;
+                    const nextSlot = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+                    const slotsToRemove = new Set([selectedTime, nextSlot]);
+                    const updated = dateSlots.filter((s) => !slotsToRemove.has(s));
+                    await setDoc(settingsRef, { ...data, [bookedDate]: updated });
+                }
+            }
+
             setStep(3);
         } catch (err) {
             console.error("Error saving booking:", err);
@@ -156,9 +200,11 @@ export default function AgendarConsulta() {
         setSelectedDate(null);
         setSelectedTime("");
         setName("");
+        setDateOfBirth(null);
         setEmail("");
         setPhone("");
         setReason("");
+        setTipoConsulta("");
         setError("");
     };
 
@@ -344,6 +390,23 @@ export default function AgendarConsulta() {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                             />
+                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="pt-br">
+                                <DatePicker
+                                    label="Data de Nascimento"
+                                    value={dateOfBirth}
+                                    onChange={(val) => setDateOfBirth(val)}
+                                    maxDate={dayjs()}
+                                    format="DD/MM/YYYY"
+                                    slotProps={{
+                                        textField: {
+                                            fullWidth: true,
+                                            required: true,
+                                            error: dateOfBirth !== null && !isDateOfBirthValid,
+                                            helperText: dateOfBirth !== null && !isDateOfBirthValid ? "Data de nascimento inválida" : "",
+                                        },
+                                    }}
+                                />
+                            </LocalizationProvider>
                             <TextField
                                 label="Email"
                                 fullWidth
@@ -373,6 +436,55 @@ export default function AgendarConsulta() {
                                 value={reason}
                                 onChange={(e) => setReason(e.target.value)}
                             />
+
+                            <FormControl
+                                fullWidth
+                                variant="outlined"
+                                sx={{
+                                    maxWidth: 800,
+                                    mt: 2
+                                }}
+                            >
+                                <InputLabel id="tipo-consulta-label">
+                                    Tipo de Consulta
+                                </InputLabel>
+
+                                <Select
+                                    labelId="tipo-consulta-label"
+                                    id="tipo-consulta"
+                                    value={tipoConsulta}
+                                    label="Tipo de Consulta"
+                                    onChange={(e) => setTipoConsulta(e.target.value)}
+                                    required
+                                    sx={{
+                                        borderRadius: 3,
+                                        backgroundColor: "#fafafa",
+                                        "& .MuiOutlinedInput-notchedOutline": {
+                                            borderColor: "#ddd",
+                                        },
+                                        "&:hover .MuiOutlinedInput-notchedOutline": {
+                                            borderColor: "#999",
+                                        },
+                                        "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                                            borderColor: "#2e7d32",
+                                        },
+                                    }}
+                                >
+                                    <MenuItem value="">
+                                        <em>Selecionar...</em>
+                                    </MenuItem>
+
+                                    <MenuItem value="Consulta de nutrição avulso - 60€">
+                                        Consulta de nutrição avulso — <strong>60€</strong>
+                                    </MenuItem>
+
+                                    <MenuItem value="Pack de 4 consultas de nutrição - 220€">
+                                        Pack de 4 consultas — <strong>220€</strong>
+                                    </MenuItem>
+                                </Select>
+                            </FormControl>
+                            <FormControlLabel required control={<Checkbox />} onChange={handleChange} label="Declaro para os efeitos previstos no disposto no artigo 13º do Regulamento Geral da Proteção de Dados (EU) 2016/679 do P.E. e do Conselho de 27 de Abril (RGPD) prestar o meu consentimento para recolha, utilização, registo e tratamento dos meus dados pessoais à Nutricionista Teresa Pereira Soares CP 6107N" />
+
                         </Stack>
                     </Paper>
 
@@ -433,7 +545,7 @@ export default function AgendarConsulta() {
                 <Button
                     variant="contained"
                     fullWidth
-                    onClick={handleReset}
+                    onClick={() => router.push("/")}
                     sx={{ mt: 4, py: 1.5, fontWeight: 700, borderRadius: 2 }}
                 >
                     Voltar ao início

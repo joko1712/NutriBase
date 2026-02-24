@@ -35,6 +35,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import VideocamIcon from "@mui/icons-material/Videocam";
 import PersonSearchIcon from "@mui/icons-material/PersonSearch";
 import Tooltip from "@mui/material/Tooltip";
 import { signOut } from "firebase/auth";
@@ -243,6 +244,75 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
         }
     };
 
+    const restoreSlotToAvailability = async (date, time) => {
+        if (!date || !time) return;
+        try {
+            const [h, m] = time.split(":").map(Number);
+            const totalMin = h * 60 + m + 30;
+            const nextSlot = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+
+            const monthKey = dayjs(date).format("YYYY-MM");
+            const docRef = doc(db, "settings", monthKey);
+            const snap = await getDoc(docRef);
+            if (!snap.exists()) return;
+            const data = snap.data();
+            const dateSlots = data[date];
+            if (!Array.isArray(dateSlots)) return;
+            const slotsToRestore = [time, nextSlot];
+            const restoredSet = new Set([...dateSlots, ...slotsToRestore]);
+            const updated = [...restoredSet].sort();
+            await setDoc(docRef, { ...data, [date]: updated });
+        } catch (err) {
+            console.error("Error restoring slot to availability:", err);
+        }
+    };
+
+    const createCalendarEvent = async (booking) => {
+        try {
+            const idToken = await auth.currentUser.getIdToken();
+            const response = await fetch("/api/create-calendar-event", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({
+                    clientName: booking.name || "",
+                    clientEmail: booking.email || "",
+                    date: booking.date,
+                    time: booking.time,
+                    reason: booking.reason || "",
+                    tipoConsulta: booking.tipoConsulta || "",
+                }),
+            });
+            const data = await response.json();
+            if (data.success) {
+                return { meetLink: data.meetLink, eventId: data.eventId };
+            }
+            console.error("Calendar API error:", data.error);
+            return null;
+        } catch (err) {
+            console.error("Error calling calendar API:", err);
+            return null;
+        }
+    };
+
+    const deleteCalendarEvent = async (eventId) => {
+        try {
+            const idToken = await auth.currentUser.getIdToken();
+            await fetch("/api/delete-calendar-event", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ eventId }),
+            });
+        } catch (err) {
+            console.error("Error deleting calendar event:", err);
+        }
+    };
+
     const handleConfirmBooking = async (bookingId) => {
         try {
             await updateDoc(doc(db, "bookings", bookingId), { status: "confirmed" });
@@ -252,6 +322,33 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
             );
             if (updated) {
                 removeSlotFromAvailability(updated.date, updated.time);
+
+                const calResult = await createCalendarEvent(updated);
+                if (calResult) {
+                    await updateDoc(doc(db, "bookings", bookingId), {
+                        meetLink: calResult.meetLink,
+                        eventId: calResult.eventId,
+                    });
+                    setBookings((prev) =>
+                        prev.map((b) =>
+                            b.id === bookingId
+                                ? { ...b, meetLink: calResult.meetLink, eventId: calResult.eventId }
+                                : b
+                        )
+                    );
+                    setSnackbar({
+                        open: true,
+                        message: "Consulta confirmada! Evento Google Calendar e link Meet criados.",
+                        severity: "success",
+                    });
+                } else {
+                    setSnackbar({
+                        open: true,
+                        message: "Consulta confirmada, mas erro ao criar evento no Google Calendar.",
+                        severity: "warning",
+                    });
+                }
+
                 sendBookingEmail(updated, EMAILJS_CONFIRM_TEMPLATE_ID);
             }
         } catch (error) {
@@ -266,7 +363,13 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
             setBookings((prev) =>
                 prev.map((b) => (b.id === bookingId ? { ...b, status: "cancelled" } : b))
             );
-            if (updated) sendBookingEmail(updated, EMAILJS_CANCEL_TEMPLATE_ID);
+            if (updated) {
+                if (updated.eventId) {
+                    await deleteCalendarEvent(updated.eventId);
+                }
+                await restoreSlotToAvailability(updated.date, updated.time);
+                sendBookingEmail(updated, EMAILJS_CANCEL_TEMPLATE_ID);
+            }
         } catch (error) {
             console.error("Error cancelling booking:", error);
         }
@@ -283,15 +386,22 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
         if (!booking || !rescheduleDate || !rescheduleTime) return;
         try {
             const newDate = rescheduleDate.format("YYYY-MM-DD");
+
+            if (booking.eventId) {
+                await deleteCalendarEvent(booking.eventId);
+            }
+
             await updateDoc(doc(db, "bookings", booking.id), {
                 date: newDate,
                 time: rescheduleTime,
                 status: "pending",
+                meetLink: "",
+                eventId: "",
             });
             setBookings((prev) =>
                 prev.map((b) =>
                     b.id === booking.id
-                        ? { ...b, date: newDate, time: rescheduleTime, status: "pending" }
+                        ? { ...b, date: newDate, time: rescheduleTime, status: "pending", meetLink: "", eventId: "" }
                         : b
                 )
             );
@@ -316,14 +426,17 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
     };
 
     const activeBookings = React.useMemo(
-        () => bookings
-            .filter((b) => b.status !== "cancelled")
-            .sort((a, b) => {
-                const dateA = a.date || "";
-                const dateB = b.date || "";
-                if (dateA !== dateB) return dateA.localeCompare(dateB);
-                return (a.time || "").localeCompare(b.time || "");
-            }),
+        () => {
+            const today = dayjs().format("YYYY-MM-DD");
+            return bookings
+                .filter((b) => b.status !== "cancelled" && b.date >= today)
+                .sort((a, b) => {
+                    const dateA = a.date || "";
+                    const dateB = b.date || "";
+                    if (dateA !== dateB) return dateA.localeCompare(dateB);
+                    return (a.time || "").localeCompare(b.time || "");
+                });
+        },
         [bookings]
     );
 
@@ -336,7 +449,6 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                 if (!map[b.date]) map[b.date] = [];
                 map[b.date].push(b);
             });
-        // Sort each day's bookings by time
         for (const key of Object.keys(map)) {
             map[key].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
         }
@@ -396,13 +508,79 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
             (c) => (c.email || "").trim().toLowerCase() === bookingEmail
         );
         if (match) {
-            handleSelectClient(match);
+            try {
+                setLoading(true);
+                const userId = auth.currentUser?.uid;
+                if (!userId) return;
+
+                let clientData = match;
+                if (match.encryptedData && match.iv) {
+                    const decrypted = await decryptData(
+                        { encryptedData: match.encryptedData, iv: match.iv },
+                        userId
+                    );
+                    const clientDocRef = doc(db, "users", userId, "clients", match.id);
+                    const fileDocs = await getDocs(collection(clientDocRef, "files"));
+                    const fileDataMap = {};
+                    for (const fileDoc of fileDocs.docs) {
+                        try {
+                            const fileDecrypted = await decryptData(
+                                { encryptedData: fileDoc.data().encryptedData, iv: fileDoc.data().iv },
+                                userId
+                            );
+                            fileDataMap[fileDoc.id] = fileDecrypted.data;
+                        } catch (e) {
+                            console.warn("Could not decrypt file:", fileDoc.id, e);
+                        }
+                    }
+                    if (decrypted.items) {
+                        decrypted.items = decrypted.items.map((item) => ({
+                            ...item,
+                            files: (item.files || []).map((f) => ({
+                                ...f,
+                                data: fileDataMap[f.id] || null,
+                            })),
+                        }));
+                    }
+                    clientData = { id: match.id, ...decrypted };
+                }
+
+                if (!clientData.dateOfBirth && booking.dateOfBirth) {
+                    clientData.dateOfBirth = booking.dateOfBirth;
+                }
+                if (!clientData.phone && booking.phone) {
+                    clientData.phone = booking.phone;
+                }
+
+                const bookingMotivo = [booking.reason, booking.tipoConsulta]
+                    .filter(Boolean)
+                    .map((m) => "- " + m)
+                    .join("\n");
+                if (bookingMotivo) {
+                    clientData.motivo = clientData.motivo
+                        ? clientData.motivo + "\n" + bookingMotivo
+                        : bookingMotivo;
+                }
+
+                onSelectClient(clientData);
+            } catch (error) {
+                console.error("Error opening client from booking:", error);
+                onSelectClient(match);
+            } finally {
+                setLoading(false);
+            }
         } else {
             if (onNewClientFromBooking) {
+                const motivo = [booking.reason, booking.tipoConsulta]
+                    .filter(Boolean)
+                    .map((m) => "- " + m)
+                    .join("\n");
                 onNewClientFromBooking({
                     name: booking.name || "",
                     email: booking.email || "",
                     phone: booking.phone || "",
+                    dateOfBirth: booking.dateOfBirth || "",
+                    motivo,
                 });
             }
         }
@@ -783,6 +961,28 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                                                     {b.phone && (
                                                         <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
                                                             • {b.phone}
+                                                        </Typography>
+                                                    )}
+                                                    {b.meetLink && (
+                                                        <Typography
+                                                            variant="caption"
+                                                            component="a"
+                                                            href={b.meetLink}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            sx={{
+                                                                color: "#1a73e8",
+                                                                textDecoration: "none",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                gap: 0.5,
+                                                                mt: 0.5,
+                                                                "&:hover": { textDecoration: "underline" },
+                                                            }}
+                                                        >
+                                                            <VideocamIcon sx={{ fontSize: 14 }} />
+                                                            Google Meet
                                                         </Typography>
                                                     )}
                                                 </Box>

@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
 .env*
+google-service-account.json
+nutribase-1fd4d-4ba1b6e9a97c.json
 
 # vercel
 .vercel

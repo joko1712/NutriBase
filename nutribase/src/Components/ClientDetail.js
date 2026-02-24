@@ -163,6 +163,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
     const [form, setForm] = React.useState({
         name: "", age: "", dateOfBirth: "", gender: "",
         phone: "", email: "", address: "", occupation: "",
+        motivo: "",
         ...client,
     });
 
@@ -543,6 +544,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
                                 />
                                 <TextField label="Morada" fullWidth size="small" value={form.address} onChange={handleChange("address")} />
                                 <TextField label="Profissão" fullWidth size="small" value={form.occupation} onChange={handleChange("occupation")} />
+                                <TextField label="Motivo" fullWidth size="small" value={form.motivo} onChange={handleChange("motivo")} multiline rows={3} placeholder="Motivo da consulta..." />
                             </Stack>
                         </Paper>
                     </Grid>

@@ -13,6 +13,7 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import EditCalendarIcon from "@mui/icons-material/EditCalendar";
 import theme from "../theme";
 import Link from "next/link";
+import Avatar from "@mui/material/Avatar";
 
 export default function WelcomePage() {
     return (
@@ -33,6 +34,24 @@ export default function WelcomePage() {
                         NutriBase
                     </Typography>
                 </Box>
+
+                <Container
+                    sx={{
+                        pt: 10,
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                    }}>
+                    <Avatar
+                        src='/Images/Teresa.jpg'
+                        alt='Teresa'
+                        sx={{
+                            width: 320,
+                            height: 320,
+                            border: "3px solid #764248",
+                        }}
+                    />
+                </Container>
 
                 {/* Hero */}
                 <Container maxWidth='sm' sx={{ py: 10, textAlign: "center" }}>
