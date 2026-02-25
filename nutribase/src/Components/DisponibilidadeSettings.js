@@ -28,12 +28,20 @@ import "dayjs/locale/pt";
 
 dayjs.locale("pt");
 
-const ALL_SLOTS = [
-    "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-    "12:00", "12:30", "13:00", "13:30",
-    "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
-    "17:00", "17:30", "18:00", "18:30",
-];
+const SLOTS_BY_DAY = {
+    1: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"], // Mon
+    2: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"], // Tue
+    3: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"], // Wed
+    4: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"], // Thu
+    5: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"], // Fri
+    6: ["09:00", "09:30", "10:00", "10:30", "11:00"],                                     // Sat
+    0: [],                                                                                          // Sun
+};
+
+function getSlotsForDate(dateKey) {
+    const dow = dayjs(dateKey).day();
+    return SLOTS_BY_DAY[dow] || [];
+}
 
 const WEEKDAY_HEADERS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -59,7 +67,7 @@ export default function DisponibilidadeSettings({ onBack }) {
     const [viewMonth, setViewMonth] = React.useState(today.month());
     const [selectedDate, setSelectedDate] = React.useState(null);
 
-    const [availability, setAvailability] = React.useState({});
+    const [unavailability, setUnavailability] = React.useState({});
     const [saving, setSaving] = React.useState(false);
     const [hasChanges, setHasChanges] = React.useState(false);
     const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
@@ -71,13 +79,13 @@ export default function DisponibilidadeSettings({ onBack }) {
             try {
                 const snap = await getDoc(doc(db, "settings", monthDocId));
                 if (snap.exists()) {
-                    setAvailability(snap.data());
+                    setUnavailability(snap.data());
                 } else {
-                    setAvailability({});
+                    setUnavailability({});
                 }
             } catch (err) {
-                console.error("Error fetching availability:", err);
-                setAvailability({});
+                console.error("Error fetching unavailability:", err);
+                setUnavailability({});
             }
             setHasChanges(false);
         };
@@ -113,27 +121,28 @@ export default function DisponibilidadeSettings({ onBack }) {
     })();
 
     const toggleSlot = (dateKey, slot) => {
-        setAvailability((prev) => {
-            const dateSlots = prev[dateKey] || [];
-            const updated = dateSlots.includes(slot)
-                ? dateSlots.filter((s) => s !== slot)
-                : [...dateSlots, slot].sort();
+        setUnavailability((prev) => {
+            const blockedSlots = prev[dateKey] || [];
+            const updated = blockedSlots.includes(slot)
+                ? blockedSlots.filter((s) => s !== slot)
+                : [...blockedSlots, slot].sort();
             return { ...prev, [dateKey]: updated };
         });
         setHasChanges(true);
     };
 
     const toggleAllSlots = (dateKey) => {
-        setAvailability((prev) => {
-            const dateSlots = prev[dateKey] || [];
-            const updated = dateSlots.length === ALL_SLOTS.length ? [] : [...ALL_SLOTS];
+        const daySlots = getSlotsForDate(dateKey);
+        setUnavailability((prev) => {
+            const blockedSlots = prev[dateKey] || [];
+            const updated = blockedSlots.length === daySlots.length ? [] : [...daySlots];
             return { ...prev, [dateKey]: updated };
         });
         setHasChanges(true);
     };
 
     const clearDate = (dateKey) => {
-        setAvailability((prev) => {
+        setUnavailability((prev) => {
             const next = { ...prev };
             delete next[dateKey];
             return next;
@@ -145,16 +154,16 @@ export default function DisponibilidadeSettings({ onBack }) {
         setSaving(true);
         try {
             const toSave = {};
-            for (const [k, v] of Object.entries(availability)) {
+            for (const [k, v] of Object.entries(unavailability)) {
                 if (Array.isArray(v) && v.length > 0) {
                     toSave[k] = v;
                 }
             }
             await setDoc(doc(db, "settings", monthDocId), toSave);
             setHasChanges(false);
-            setSnackbar({ open: true, message: "Disponibilidade guardada com sucesso!", severity: "success" });
+            setSnackbar({ open: true, message: "Indisponibilidade guardada com sucesso!", severity: "success" });
         } catch (err) {
-            console.error("Error saving availability:", err);
+            console.error("Error saving unavailability:", err);
             setSnackbar({ open: true, message: "Erro ao guardar.", severity: "error" });
         } finally {
             setSaving(false);
@@ -171,13 +180,14 @@ export default function DisponibilidadeSettings({ onBack }) {
         try { await signOut(auth); } catch (err) { console.error(err); }
     };
 
-    const selectedSlots = selectedDate ? (availability[selectedDate] || []) : [];
+    const daySlots = selectedDate ? getSlotsForDate(selectedDate) : [];
+    const blockedSlots = selectedDate ? (unavailability[selectedDate] || []) : [];
     const selectedDayjs = selectedDate ? dayjs(selectedDate) : null;
     const isPast = (dateKey) => dayjs(dateKey).isBefore(dayjs(), "day");
 
-    const configuredDays = React.useMemo(() => {
-        return monthDays.filter((d) => d && availability[d] && availability[d].length > 0).length;
-    }, [monthDays, availability]);
+    const blockedDays = React.useMemo(() => {
+        return monthDays.filter((d) => d && unavailability[d] && unavailability[d].length > 0).length;
+    }, [monthDays, unavailability]);
 
     return (
         <Box sx={{ minHeight: "100vh", bgcolor: "#EFEFEF" }}>
@@ -207,7 +217,7 @@ export default function DisponibilidadeSettings({ onBack }) {
                             Disponibilidade
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Selecione um dia no calendário e configure os horários disponíveis
+                            Todos os horários estão disponíveis por defeito. Clique para bloquear os que não pretende.
                         </Typography>
                     </Box>
                     <Stack direction="row" spacing={1}>
@@ -263,33 +273,35 @@ export default function DisponibilidadeSettings({ onBack }) {
                                 }
                                 const day = dayjs(dateKey).date();
                                 const isSelected = selectedDate === dateKey;
-                                const hasSlots = availability[dateKey] && availability[dateKey].length > 0;
+                                const hasBlocks = unavailability[dateKey] && unavailability[dateKey].length > 0;
                                 const past = isPast(dateKey);
+                                const isSunday = dayjs(dateKey).day() === 0;
+                                const disabled = past || isSunday;
                                 return (
                                     <Box
                                         key={dateKey}
-                                        onClick={() => !past && setSelectedDate(dateKey)}
+                                        onClick={() => !disabled && setSelectedDate(dateKey)}
                                         sx={{
                                             aspectRatio: "1",
                                             display: "flex",
                                             alignItems: "center",
                                             justifyContent: "center",
                                             borderRadius: 1.5,
-                                            cursor: past ? "default" : "pointer",
+                                            cursor: disabled ? "default" : "pointer",
                                             position: "relative",
-                                            opacity: past ? 0.35 : 1,
+                                            opacity: disabled ? 0.35 : 1,
                                             bgcolor: isSelected ? "#764248" : "transparent",
                                             color: isSelected ? "white" : "text.primary",
                                             fontWeight: isSelected ? 700 : 400,
                                             fontSize: "0.85rem",
-                                            border: hasSlots && !isSelected ? "2px solid #764248" : "2px solid transparent",
-                                            "&:hover": past ? {} : {
+                                            border: hasBlocks && !isSelected ? "2px solid #d32f2f" : "2px solid transparent",
+                                            "&:hover": disabled ? {} : {
                                                 bgcolor: isSelected ? "#5a3238" : "action.hover",
                                             },
                                         }}
                                     >
                                         {day}
-                                        {hasSlots && !isSelected && (
+                                        {hasBlocks && !isSelected && (
                                             <Box
                                                 sx={{
                                                     position: "absolute",
@@ -297,7 +309,7 @@ export default function DisponibilidadeSettings({ onBack }) {
                                                     width: 5,
                                                     height: 5,
                                                     borderRadius: "50%",
-                                                    bgcolor: "#764248",
+                                                    bgcolor: "#d32f2f",
                                                 }}
                                             />
                                         )}
@@ -307,7 +319,7 @@ export default function DisponibilidadeSettings({ onBack }) {
                         </Box>
 
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block" }}>
-                            {configuredDays} dia{configuredDays !== 1 ? "s" : ""} configurado{configuredDays !== 1 ? "s" : ""} este mês
+                            {blockedDays} dia{blockedDays !== 1 ? "s" : ""} com horários bloqueados este mês
                         </Typography>
                     </Paper>
 
@@ -316,7 +328,13 @@ export default function DisponibilidadeSettings({ onBack }) {
                         {!selectedDate ? (
                             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
                                 <Typography variant="body1" color="text.secondary">
-                                    Selecione um dia no calendário para configurar os horários
+                                    Selecione um dia no calendário para bloquear horários
+                                </Typography>
+                            </Box>
+                        ) : daySlots.length === 0 ? (
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
+                                <Typography variant="body1" color="text.secondary">
+                                    Sem horários de trabalho neste dia
                                 </Typography>
                             </Box>
                         ) : (
@@ -327,22 +345,22 @@ export default function DisponibilidadeSettings({ onBack }) {
                                             {selectedDayjs?.format("dddd, D [de] MMMM")}
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary">
-                                            {selectedSlots.length} de {ALL_SLOTS.length} horários ativos
+                                            {daySlots.length - blockedSlots.length} de {daySlots.length} horários disponíveis
                                         </Typography>
                                     </Box>
                                     <Stack direction="row" spacing={1}>
                                         <Chip
-                                            label={selectedSlots.length === ALL_SLOTS.length ? "Limpar tudo" : "Selecionar tudo"}
+                                            label={blockedSlots.length === daySlots.length ? "Disponibilizar tudo" : "Bloquear tudo"}
                                             size="small"
                                             variant="outlined"
                                             onClick={() => toggleAllSlots(selectedDate)}
                                             sx={{ cursor: "pointer" }}
                                         />
-                                        {selectedSlots.length > 0 && (
+                                        {blockedSlots.length > 0 && (
                                             <Chip
-                                                label="Remover dia"
+                                                label="Limpar bloqueios"
                                                 size="small"
-                                                color="error"
+                                                color="success"
                                                 variant="outlined"
                                                 onClick={() => clearDate(selectedDate)}
                                                 sx={{ cursor: "pointer" }}
@@ -358,21 +376,21 @@ export default function DisponibilidadeSettings({ onBack }) {
                                         gap: 1,
                                     }}
                                 >
-                                    {ALL_SLOTS.map((slot) => {
-                                        const active = selectedSlots.includes(slot);
+                                    {daySlots.map((slot) => {
+                                        const isBlocked = blockedSlots.includes(slot);
                                         return (
                                             <Button
                                                 key={slot}
                                                 size="small"
-                                                variant={active ? "contained" : "outlined"}
+                                                variant={isBlocked ? "contained" : "outlined"}
                                                 onClick={() => toggleSlot(selectedDate, slot)}
                                                 sx={{
                                                     py: 1,
                                                     fontWeight: 600,
                                                     borderRadius: 2,
-                                                    ...(active
-                                                        ? { bgcolor: "#764248", "&:hover": { bgcolor: "#5a3238" } }
-                                                        : { color: "text.secondary", borderColor: "divider" }),
+                                                    ...(isBlocked
+                                                        ? { bgcolor: "#d32f2f", "&:hover": { bgcolor: "#b71c1c" } }
+                                                        : { color: "#2e7d32", borderColor: "#2e7d32" }),
                                                 }}
                                             >
                                                 {slot}

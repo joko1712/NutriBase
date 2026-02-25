@@ -33,6 +33,21 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem"
 
+const SLOTS_BY_DAY = {
+    1: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"], // Mon
+    2: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"], // Tue
+    3: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"], // Wed
+    4: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00"], // Thu
+    5: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"], // Fri
+    6: ["09:00", "09:30", "10:00", "10:30", "11:00"],                                     // Sat
+    0: [],                                                                                          // Sun
+};
+
+function getSlotsForDate(dateKey) {
+    const dow = dayjs(dateKey).day();
+    return SLOTS_BY_DAY[dow] || [];
+}
+
 import updateLocale from "dayjs/plugin/updateLocale";
 
 dayjs.extend(updateLocale);
@@ -109,18 +124,20 @@ export default function AgendarConsulta() {
 
     useEffect(() => {
         if (step === 3) {
-            const timer = setTimeout(() => router.push("/"), 5000);
+            const timer = setTimeout(() => router.push("/"), 60000);
             return () => clearTimeout(timer);
         }
     }, [step, router]);
 
     const availableSlots = React.useMemo(() => {
         if (!selectedDate) return [];
-        const monthKey = selectedDate.format("YYYY-MM");
         const dateKey = selectedDate.format("YYYY-MM-DD");
-        const monthAvail = monthData[monthKey];
-        if (!monthAvail) return [];
-        return monthAvail[dateKey] || [];
+        const monthKey = selectedDate.format("YYYY-MM");
+        const daySlots = getSlotsForDate(dateKey);
+        if (daySlots.length === 0) return [];
+        const monthUnavail = monthData[monthKey];
+        const blockedSlots = new Set(monthUnavail?.[dateKey] || []);
+        return daySlots.filter((s) => !blockedSlots.has(s));
     }, [selectedDate, monthData]);
 
     const isLoadingSlots = React.useMemo(() => {
@@ -130,12 +147,15 @@ export default function AgendarConsulta() {
     }, [selectedDate, loadingMonth]);
 
     const shouldDisableDate = React.useCallback((date) => {
-        const monthKey = date.format("YYYY-MM");
         const dateKey = date.format("YYYY-MM-DD");
-        const monthAvail = monthData[monthKey];
-        if (!monthAvail) return false;
-        const slots = monthAvail[dateKey];
-        return !slots || slots.length === 0;
+        const monthKey = date.format("YYYY-MM");
+        if (date.year() > 2030) return true;
+        const daySlots = getSlotsForDate(dateKey);
+        if (daySlots.length === 0) return true;
+        const monthUnavail = monthData[monthKey];
+        if (!monthUnavail) return false;
+        const blockedSlots = monthUnavail[dateKey];
+        return Array.isArray(blockedSlots) && blockedSlots.length >= daySlots.length;
     }, [monthData]);
 
     React.useEffect(() => {
@@ -173,18 +193,15 @@ export default function AgendarConsulta() {
             const monthKey = selectedDate.format("YYYY-MM");
             const settingsRef = doc(db, "settings", monthKey);
             const snap = await getDoc(settingsRef);
-            if (snap.exists()) {
-                const data = snap.data();
-                const dateSlots = data[bookedDate];
-                if (Array.isArray(dateSlots)) {
-                    const [h, m] = selectedTime.split(":").map(Number);
-                    const totalMin = h * 60 + m + 30;
-                    const nextSlot = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
-                    const slotsToRemove = new Set([selectedTime, nextSlot]);
-                    const updated = dateSlots.filter((s) => !slotsToRemove.has(s));
-                    await setDoc(settingsRef, { ...data, [bookedDate]: updated });
-                }
-            }
+            const data = snap.exists() ? snap.data() : {};
+            const dateSlots = data[bookedDate] || [];
+            const [h, m] = selectedTime.split(":").map(Number);
+            const totalMin = h * 60 + m + 30;
+            const nextSlot = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+            const slotsToBlock = [selectedTime, nextSlot];
+            const blockedSet = new Set([...dateSlots, ...slotsToBlock]);
+            const updated = [...blockedSet].sort();
+            await setDoc(settingsRef, { ...data, [bookedDate]: updated });
 
             setStep(3);
         } catch (err) {

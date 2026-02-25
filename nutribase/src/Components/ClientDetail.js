@@ -34,8 +34,9 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import TableChartIcon from "@mui/icons-material/TableChart";
 import PrintIcon from "@mui/icons-material/Print";
 import { signOut } from "firebase/auth";
-import { auth, db } from "../firebase-config";
+import { auth, db, storage } from "../firebase-config";
 import { doc, setDoc, deleteDoc, collection, getDocs, writeBatch } from "firebase/firestore";
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { encryptData } from "../utils/encryption";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
@@ -253,14 +254,45 @@ export default function ClientDetail({ client, onBack, isNew }) {
             const clientDocRef = doc(db, "users", userId, "clients", clientId);
             const filesColRef = collection(clientDocRef, "files");
 
-            const allFiles = [];
+            const legacyFiles = [];
+            const storageFiles = [];
             const itemsWithoutData = items.map((item) => {
                 const fileMeta = (item.files || []).map((f) => {
-                    allFiles.push({ ...f, itemId: item.id });
-                    return { id: f.id, name: f.name, size: f.size, type: f.type };
+                    if (f.storagePath || f.url) {
+                        storageFiles.push({ ...f, itemId: item.id });
+                        return { id: f.id, name: f.name, size: f.size, type: f.type, storagePath: f.storagePath || "", url: f.url || "" };
+                    } else {
+                        legacyFiles.push({ ...f, itemId: item.id });
+                        return { id: f.id, name: f.name, size: f.size, type: f.type };
+                    }
                 });
                 return { ...item, files: fileMeta };
             });
+
+            if (!client?.id) {
+                for (const file of storageFiles) {
+                    if (file.storagePath && file.storagePath.includes("/clients/new/")) {
+                        try {
+                            const oldRef = storageRef(storage, file.storagePath);
+                            const response = await fetch(file.url);
+                            const blob = await response.blob();
+                            const newPath = file.storagePath.replace("/clients/new/", `/clients/${clientId}/`);
+                            const newRef = storageRef(storage, newPath);
+                            await uploadBytes(newRef, blob);
+                            const newUrl = await getDownloadURL(newRef);
+                            file.storagePath = newPath;
+                            file.url = newUrl;
+                            for (const item of itemsWithoutData) {
+                                const fm = item.files.find((f) => f.id === file.id);
+                                if (fm) { fm.storagePath = newPath; fm.url = newUrl; }
+                            }
+                            try { await deleteObject(oldRef); } catch (e) { /* ignore */ }
+                        } catch (e) {
+                            console.warn("Could not move file to new path:", e);
+                        }
+                    }
+                }
+            }
 
             const clientData = {
                 ...form,
@@ -288,7 +320,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
             const oldFileDocs = await getDocs(filesColRef);
             const batch = writeBatch(db);
             oldFileDocs.forEach((d) => batch.delete(d.ref));
-            for (const file of allFiles) {
+            for (const file of legacyFiles) {
                 const fileEncrypted = await encryptData({ data: file.data }, userId);
                 batch.set(doc(filesColRef, file.id), {
                     itemId: file.itemId,
@@ -356,7 +388,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
     };
 
     const [uploading, setUploading] = React.useState({});
-    const MAX_FILE_SIZE = 700 * 1024;
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB per file
 
     const addItem = () => {
         setItems((prev) => [...prev, { id: crypto.randomUUID(), text: "", files: [] }]);
@@ -368,32 +400,35 @@ export default function ClientDetail({ client, onBack, isNew }) {
         setItems((prev) => prev.filter((it) => it.id !== id));
     };
 
-    const fileToBase64 = (file) =>
-        new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-
     const handleFileUpload = async (itemId, fileList) => {
         if (!fileList?.length) return;
+        const userId = auth.currentUser?.uid;
+        if (!userId) {
+            setSnackbar({ open: true, message: "Utilizador não autenticado.", severity: "error" });
+            return;
+        }
         setUploading((prev) => ({ ...prev, [itemId]: true }));
 
         try {
             const newFiles = [];
             for (const file of Array.from(fileList)) {
                 if (file.size > MAX_FILE_SIZE) {
-                    setSnackbar({ open: true, message: `"${file.name}" excede 700KB. Use ficheiros mais pequenos.`, severity: "warning" });
+                    setSnackbar({ open: true, message: `"${file.name}" excede 25MB.`, severity: "warning" });
                     continue;
                 }
-                const base64 = await fileToBase64(file);
+                const fileId = crypto.randomUUID();
+                const clientId = client?.id || "new";
+                const filePath = `users/${userId}/clients/${clientId}/files/${fileId}_${file.name}`;
+                const fileRef = storageRef(storage, filePath);
+                await uploadBytes(fileRef, file);
+                const downloadURL = await getDownloadURL(fileRef);
                 newFiles.push({
-                    id: crypto.randomUUID(),
+                    id: fileId,
                     name: file.name,
                     size: file.size,
                     type: file.type,
-                    data: base64,
+                    storagePath: filePath,
+                    url: downloadURL,
                 });
             }
             if (newFiles.length) {
@@ -406,14 +441,23 @@ export default function ClientDetail({ client, onBack, isNew }) {
                 );
             }
         } catch (error) {
-            console.error("Error reading file:", error);
-            setSnackbar({ open: true, message: "Erro ao ler ficheiro: " + error.message, severity: "error" });
+            console.error("Error uploading file:", error);
+            setSnackbar({ open: true, message: "Erro ao carregar ficheiro: " + error.message, severity: "error" });
         } finally {
             setUploading((prev) => ({ ...prev, [itemId]: false }));
         }
     };
 
-    const removeFile = (itemId, fileId) => {
+    const removeFile = async (itemId, fileId) => {
+        const item = items.find((it) => it.id === itemId);
+        const file = item?.files?.find((f) => f.id === fileId);
+        if (file?.storagePath) {
+            try {
+                await deleteObject(storageRef(storage, file.storagePath));
+            } catch (err) {
+                console.warn("Could not delete file from Storage:", err);
+            }
+        }
         setItems((prev) =>
             prev.map((it) =>
                 it.id === itemId
@@ -424,10 +468,14 @@ export default function ClientDetail({ client, onBack, isNew }) {
     };
 
     const downloadFile = (file) => {
-        const link = document.createElement("a");
-        link.href = file.data;
-        link.download = file.name;
-        link.click();
+        if (file.url) {
+            window.open(file.url, "_blank");
+        } else if (file.data) {
+            const link = document.createElement("a");
+            link.href = file.data;
+            link.download = file.name;
+            link.click();
+        }
     };
 
     const formatFileSize = (bytes) => {

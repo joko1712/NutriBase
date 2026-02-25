@@ -232,15 +232,14 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
             const monthKey = dayjs(date).format("YYYY-MM");
             const docRef = doc(db, "settings", monthKey);
             const snap = await getDoc(docRef);
-            if (!snap.exists()) return;
-            const data = snap.data();
-            const dateSlots = data[date];
-            if (!Array.isArray(dateSlots)) return;
-            const slotsToRemove = new Set([time, nextSlot]);
-            const updated = dateSlots.filter((s) => !slotsToRemove.has(s));
+            const data = snap.exists() ? snap.data() : {};
+            const dateSlots = data[date] || [];
+            const slotsToBlock = [time, nextSlot];
+            const blockedSet = new Set([...dateSlots, ...slotsToBlock]);
+            const updated = [...blockedSet].sort();
             await setDoc(docRef, { ...data, [date]: updated });
         } catch (err) {
-            console.error("Error removing slot from availability:", err);
+            console.error("Error blocking slot:", err);
         }
     };
 
@@ -258,12 +257,11 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
             const data = snap.data();
             const dateSlots = data[date];
             if (!Array.isArray(dateSlots)) return;
-            const slotsToRestore = [time, nextSlot];
-            const restoredSet = new Set([...dateSlots, ...slotsToRestore]);
-            const updated = [...restoredSet].sort();
+            const slotsToRestore = new Set([time, nextSlot]);
+            const updated = dateSlots.filter((s) => !slotsToRestore.has(s));
             await setDoc(docRef, { ...data, [date]: updated });
         } catch (err) {
-            console.error("Error restoring slot to availability:", err);
+            console.error("Error restoring slot:", err);
         }
     };
 
@@ -538,7 +536,7 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                             ...item,
                             files: (item.files || []).map((f) => ({
                                 ...f,
-                                data: fileDataMap[f.id] || null,
+                                data: f.url ? undefined : (fileDataMap[f.id] || null),
                             })),
                         }));
                     }
@@ -618,7 +616,7 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                         ...item,
                         files: (item.files || []).map((f) => ({
                             ...f,
-                            data: fileDataMap[f.id] || null,
+                            data: f.url ? undefined : (fileDataMap[f.id] || null),
                         })),
                     }));
                 }
