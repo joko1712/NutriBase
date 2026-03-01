@@ -714,7 +714,7 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                             px: 2,
                             py: 1.25,
                             display: "grid",
-                            gridTemplateColumns: "1fr 1fr 80px 140px",
+                            gridTemplateColumns: "1fr 1fr 1fr 80px 140px",
                             alignItems: "center",
                             color: "primary.contrastText",
                         }}
@@ -725,6 +725,10 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
 
                         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                             Email
+                        </Typography>
+
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                            Contacto
                         </Typography>
 
                         <Typography variant="subtitle2" sx={{ fontWeight: 700, textAlign: "center" }}>
@@ -753,7 +757,7 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                                         px: 2,
                                         py: 1.5,
                                         display: "grid",
-                                        gridTemplateColumns: "1fr 1fr 80px 140px",
+                                        gridTemplateColumns: "1fr 1fr 1fr 80px 140px",
                                         alignItems: "center",
                                         borderTop: "1px solid",
                                         borderColor: "divider",
@@ -765,6 +769,9 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
                                         {c.email || "-"}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {c.phone || "-"}
                                     </Typography>
                                     <Typography variant="body2" sx={{ textAlign: "center" }}>
                                         {c.age ?? "-"}

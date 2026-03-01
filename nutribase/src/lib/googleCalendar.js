@@ -52,16 +52,17 @@ export async function createCalendarEvent({
     )}`;
     const endDateTime = `${date}T${endTime}:00`;
 
-    const descriptionParts = [];
+    const descriptionParts = [
+        `Consulta de Nutrição com ${nutritionistName}`,
+        `Email: ${nutritionistEmail}`,
+        "",
+    ];
     if (tipoConsulta) descriptionParts.push(`Tipo: ${tipoConsulta}`);
     if (reason) descriptionParts.push(`Motivo: ${reason}`);
-    const description =
-        descriptionParts.length > 0
-            ? descriptionParts.join("\n")
-            : "Consulta de Nutrição";
+    const description = descriptionParts.join("\n");
 
     const event = {
-        summary: `Consulta de Nutrição - ${clientName}`,
+        summary: `Consulta de Nutrição - ${nutritionistName}`,
         description,
         start: {
             dateTime: startDateTime,
@@ -71,14 +72,20 @@ export async function createCalendarEvent({
             dateTime: endDateTime,
             timeZone,
         },
+        organizer: {
+            email: nutritionistEmail,
+            displayName: nutritionistName,
+        },
         attendees: [
             {
                 email: nutritionistEmail,
                 displayName: nutritionistName,
                 responseStatus: "accepted",
+                organizer: true,
             },
             { email: clientEmail, displayName: clientName },
         ],
+        guestsCanSeeOtherGuests: false,
         reminders: {
             useDefault: false,
             overrides: [

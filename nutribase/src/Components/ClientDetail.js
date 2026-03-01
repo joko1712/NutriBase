@@ -24,6 +24,10 @@ import {
     Typography,
     Alert,
     Snackbar,
+    Checkbox,
+    FormGroup,
+    FormControlLabel,
+    Divider,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
@@ -59,8 +63,9 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import 'dayjs/locale/pt-br';
 import dayjs from 'dayjs';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
-
-
+import { FactorPicker } from "./FactorPicker";
+import { MacroSlider } from "./MacroSlider";
+import Image from "next/image";
 const CHART_GROUPS = [
     {
         title: "Altura / Peso / IMC",
@@ -107,6 +112,7 @@ const ALL_TABLE_FIELDS = [
     { key: "weight", label: "Peso (kg)" },
     { key: "height", label: "Altura (cm)" },
     { key: "bmi", label: "IMC", disabled: true },
+    { key: "bmiClass", label: "IMC CLASSE", disabled: true },
     { key: "bodyFat", label: "% Gordura" },
     { key: "muscleMass", label: "M. Musc. (kg)" },
     { key: "visceralFat", label: "G. Visceral" },
@@ -125,8 +131,52 @@ const ALL_TABLE_FIELDS = [
     { key: "calf", label: "Gémeo (cm)" },
 ];
 
+const ACTIVIDADE_FISICA = [
+    { id: "acamado", label: "Acamado", kind: "range", min: 1.2, max: 1.2 },
+    { id: "sedentario", label: "Sedentário/Repouso", kind: "range", min: 1.25, max: 1.25 },
+    { id: "repouso", label: "Repouso", kind: "range", min: 1.3, max: 1.3 },
+    { id: "ambulatorio", label: "Ambulatório", kind: "range", min: 1.5, max: 1.5 },
+    { id: "moderada", label: "Com actividade moderada", kind: "range", min: 1.6, max: 1.7, step: 0.01 },
+    { id: "intensa", label: "Com actividade intensa", kind: "range", min: 1.7, max: 2.5, step: 0.01 },
+
+];
+
+const FACTOR_STRESS = [
+    { id: "semcomplicaçoes", label: "Sem Complicações", kind: "range", min: 1, max: 1 },
+    { id: "pos-operatorio", label: "Pos-Operatório", kind: "range", min: 1.1, max: 1.1 },
+    { id: "fractura", label: "Fractura", kind: "range", min: 1.2, max: 1.2 },
+    { id: "infecçaograve", label: "Infecção Grave", kind: "range", min: 1.4, max: 1.4 },
+    { id: "politraumatismo", label: "Politraumatismo", kind: "range", min: 1.5, max: 1.5 },
+    { id: "queimaduras", label: "Queimaduras", kind: "range", min: 1.7, max: 2, step: 0.01 },
+]
+
+const FACTOR_TERMICO = [
+    { id: "<38", label: "< 38ºC", kind: "range", min: 1, max: 1 },
+    { id: "38", label: "38ºC", kind: "range", min: 1.1, max: 1.1 },
+    { id: "39", label: "39ºC", kind: "range", min: 1.2, max: 1.2 },
+    { id: "40", label: "40ºC Grave", kind: "range", min: 1.3, max: 1.3 },
+]
+
+
+const FACTOR_AGRESSAO = [
+    { id: "malnutriçao", label: "Malnutrição", kind: "range", min: 0.7, max: 0.7 },
+    { id: "sem-complicaçoes", label: "Sem Complicações", kind: "range", min: 1, max: 1, step: 0.01 },
+    { id: "neoplasias", label: "Neoplasias", kind: "range", min: 1.1, max: 1.3, step: 0.01 },
+    { id: "infecçao", label: "Infecção", kind: "range", min: 1.2, max: 1.2 },
+    { id: "pequena-cirurgia", label: "Pequena Cirurgia", kind: "range", min: 1.2, max: 1.3, step: 0.01 },
+    { id: "cirurgia-major", label: "Cirurgia Major", kind: "range", min: 1.2, max: 1.3, step: 0.01 },
+    { id: "sepsis", label: "Sepsis", kind: "range", min: 1.3, max: 1.5, step: 0.01 },
+    { id: "politraumatismo", label: "Politraumatismo", kind: "range", min: 1.4, max: 1.5, step: 0.01 },
+    { id: "queimaduras", label: "Queimaduras", kind: "range", min: 1.5, max: 2, step: 0.01 },
+]
+
+const FACTOR_ANABOLICO = [
+    { id: "manutencao", label: "Manutenção", kind: "range", min: 1, max: 1 },
+    { id: "anabolismo", label: "Anabolismo", kind: "range", min: 1.2, max: 1.2 },
+]
+
 const EMPTY_ROW = {
-    date: "", weight: "", height: "", bmi: "",
+    date: "", weight: "", height: "", bmi: "", bmiClass: "",
     bodyFat: "", muscleMass: "", visceralFat: "", water: "",
     tricep: "", subscapular: "", suprailiac: "", abdominalFold: "", thighFold: "", calfFold: "",
     waist: "", hip: "", chest: "", arm: "", thigh: "", calf: "",
@@ -163,8 +213,8 @@ function validateEmail(email) {
 export default function ClientDetail({ client, onBack, isNew }) {
     const [form, setForm] = React.useState({
         name: "", age: "", dateOfBirth: "", gender: "",
-        phone: "", email: "", address: "", occupation: "",
-        motivo: "",
+        phone: "", email: "", address: "", occupation: "", chosenWeight: "", chosenMB: "", chosenNET: "",
+        motivo: "", isPregnant: false, breastFeeding: false, vM: "",
         ...client,
     });
 
@@ -195,6 +245,165 @@ export default function ClientDetail({ client, onBack, isNew }) {
 
     const phoneError = validatePhone(form.phone);
     const emailError = validateEmail(form.email);
+
+    const [activity, setActivity] = React.useState(
+        client?.factors?.activity || { selectedId: "", value: "" }
+    );
+    const activityFactor = Number(activity.value) || 1;
+
+    const [stress, setStress] = React.useState(
+        client?.factors?.stress || { selectedId: "", value: "" }
+    );
+    const stressFactor = Number(stress.value) || 1;
+
+    const [temp, setTemp] = React.useState(
+        client?.factors?.temp || { selectedId: "", value: "" }
+    );
+    const tempFactor = Number(temp.value) || 1;
+
+    const [aggression, setAggression] = React.useState(
+        client?.factors?.aggression || { selectedId: "", value: "" }
+    );
+    const aggressionFactor = Number(aggression.value) || 1;
+
+    const [ana, setAna] = React.useState(
+        client?.factors?.ana || { selectedId: "", value: "" }
+    );
+    const anaFactor = Number(ana.value) || 1;
+
+    const netSimple = () => {
+        const mb = parseFloat(form.chosenMB);
+        if (!Number.isFinite(mb)) return "";
+        return Math.round(mb * activityFactor);
+    };
+
+    const netPrat = () => {
+        const w = parseFloat(form.chosenWeight);
+        const v = parseFloat(form.vM);
+
+        return Math.round(v * w)
+    }
+
+    const netFNB = (rangeKey) => {
+        const w = parseFloat(form.chosenWeight);
+        const h = latestHeight;
+        const hM = Number.isFinite(h) ? h / 100 : NaN;
+        const a = parseFloat(form.age);
+
+        if (!Number.isFinite(w)) return { M: "", F: "" };
+
+        switch (rangeKey) {
+            case "1-3": return { M: Math.round(89 * w - 100 + 20), F: Math.round(89 * w - 100 + 20) };
+            case "3-8": return { M: Math.round(88.5 - (61.9 * a) + activityFactor * ((26.7 * w) + (903 * hM)) + 20), F: Math.round(135.3 - (30.8 * a) + activityFactor * ((10 * w) + (934 * hM)) + 20) };
+            case "9-18": return { M: Math.round(88.5 - (61.9 * a) + activityFactor * ((26.7 * w) + (903 * hM)) + 25), F: Math.round(135.3 - (30.8 * a) + activityFactor * ((10 * w) + (934 * hM)) + 25) };
+            case "19+": return { M: Math.round(662 - (9.53 * a) + activityFactor * ((15.91 * w) + (539.6 * hM))), F: Math.round(354 - (6.91 * a) + activityFactor * ((9.36 * w) + (726 * hM))) };
+            default: return { M: "", F: "" };
+        }
+    };
+
+    const netInfancia = (rangeKey) => {
+        const w = parseFloat(form.chosenWeight) || latestWeight;
+        if (!Number.isFinite(w)) return "";
+
+        switch (rangeKey) {
+            case "0-3": return Math.round((89 * w - 100) + 175);
+            case "4-6": return Math.round((89 * w - 100) + 56);
+            case "7-12": return Math.round((89 * w - 100) + 22);
+            case "13-35": return Math.round((89 * w - 100) + 20);
+            default: return "";
+        }
+    };
+
+    const netGravidas = (trimestre) => {
+        const w = parseFloat(form.chosenWeight);
+        const h = latestHeight;
+        const hM = Number.isFinite(h) ? h / 100 : NaN;
+        const a = parseFloat(form.age);
+
+        const mb = parseFloat(form.chosenMB);
+        if (!Number.isFinite(mb)) return "";
+
+        switch (trimestre) {
+            case 1: return Math.round(354 - (6.91 * a) + activityFactor * ((9.36 * w) + (726 * hM)));
+            case 2: return Math.round(354 - (6.91 * a) + activityFactor * ((9.36 * w) + (726 * hM)) + 340);
+            case 3: return Math.round(354 - (6.91 * a) + activityFactor * ((9.36 * w) + (726 * hM)) + 452);
+            default: return "";
+        }
+    };
+
+    const netAmamentacao = (semestre) => {
+        const w = parseFloat(form.chosenWeight);
+        const h = latestHeight;
+        const hM = Number.isFinite(h) ? h / 100 : NaN;
+        const a = parseFloat(form.age);
+
+        const mb = parseFloat(form.chosenMB);
+        if (!Number.isFinite(mb)) return "";
+
+        switch (semestre) {
+            case 1: return Math.round(354 - (6.91 * a) + activityFactor * ((9.36 * w) + (726 * hM)) + 500 - 170);
+            case 2: return Math.round(354 - (6.91 * a) + activityFactor * ((9.36 * w) + (726 * hM)) + 400);
+            default: return "";
+        }
+    };
+
+    const netDoentes = () => {
+        const mb = parseFloat(form.chosenMB);
+        if (!Number.isFinite(mb)) return "";
+        return Math.round(mb * activityFactor * stressFactor * tempFactor * aggressionFactor * anaFactor);
+    };
+
+    const [dietPct, setDietPct] = React.useState(client?.dietPct || {
+        proteinPct: 15,
+        glucidPct: 65,
+        lipidPct: 20,
+        sugarPct: "",
+        hidricoFactor: 1,
+    });
+
+    const handleSliderChange = React.useCallback(({ proteinPct, glucidPct, lipidPct }) => {
+        setDietPct((prev) => ({ ...prev, proteinPct, glucidPct, lipidPct }));
+    }, []);
+
+    const dietCalc = (key) => {
+        const net = parseFloat(form.chosenNET);
+        if (!Number.isFinite(net)) return { g: "", kcal: "", pct: "" };
+
+        const protPct = dietPct.proteinPct;
+        const glucPct = dietPct.glucidPct;
+        const lipPct = dietPct.lipidPct;
+
+        switch (key) {
+            case "Proteinas": {
+                return { g: ((net * (protPct / 100)) / 4).toFixed(1), kcal: Math.round(net * (protPct / 100)), pct: Math.round(protPct) };
+            }
+            case "Lipidos": {
+                return { g: ((net * (lipPct / 100)) / 9).toFixed(1), kcal: Math.round(net * (lipPct / 100)), pct: Math.round(lipPct) };
+            }
+
+            case "SFA": {
+                return { g: (((((lipPct * 7) / 30) / 100) * net) / 9).toFixed(1), kcal: Math.round((((lipPct * 7) / 30) / 100) * net), pct: Math.round((lipPct * 7) / 30) };
+            }
+            case "PUFA": {
+                return { g: (((((lipPct * 10) / 30) / 100) * net) / 9).toFixed(1), kcal: Math.round((((lipPct * 10) / 30) / 100) * net), pct: Math.round((lipPct * 10) / 30) };
+            }
+            case "MUFA": {
+                return { g: (((((lipPct * 13) / 30) / 100) * net) / 9).toFixed(1), kcal: Math.round((((lipPct * 13) / 30) / 100) * net), pct: Math.round((lipPct * 13) / 30) };
+            }
+            case "Glicidos": {
+                return { g: (((glucPct / 100) * net) / 4).toFixed(1), kcal: Math.round((glucPct / 100) * net), pct: Math.round(glucPct) };
+            }
+            case "Acucares": {
+                const sPct = parseFloat(dietPct.sugarPct);
+                if (!Number.isFinite(sPct)) return { g: "", kcal: "", pct: "" };
+                return { g: (((sPct / 100) * net) / 4).toFixed(1), kcal: Math.round((sPct / 100) * net), pct: sPct };
+            }
+            case "Fibra": {
+                return { g: ((net * 14) / 1000).toFixed(1), kcal: "", pct: "" };
+            }
+            default: return { g: "", kcal: "", pct: "" };
+        }
+    };
 
     React.useEffect(() => {
         const age = calculateAge(form.dateOfBirth);
@@ -229,7 +438,8 @@ export default function ClientDetail({ client, onBack, isNew }) {
     }, [energyNeeds.totalEnergy, macroDistribution.proteinPct, macroDistribution.carbsPct, macroDistribution.fatPct]);
 
     const handleChange = (field) => (e) => {
-        setForm((prev) => ({ ...prev, [field]: e.target.value }));
+        const { type, checked, value } = e.target;
+        setForm((prev) => ({ ...prev, [field]: type === "checkbox" ? checked : value }));
     };
 
     const handleLogout = async () => {
@@ -304,6 +514,8 @@ export default function ClientDetail({ client, onBack, isNew }) {
                 energyNeeds,
                 hydrationNeeds,
                 macroDistribution,
+                factors: { activity, stress, temp, aggression, ana },
+                dietPct,
                 lastVisit: new Date().toISOString().split("T")[0],
             };
 
@@ -331,7 +543,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
             await batch.commit();
 
             setSnackbar({ open: true, message: "Cliente guardado com sucesso!", severity: "success" });
-            setTimeout(() => onBack(), 800);
+
         } catch (error) {
             console.error("Error saving client:", error);
             setSnackbar({ open: true, message: "Erro ao guardar: " + error.message, severity: "error" });
@@ -369,18 +581,152 @@ export default function ClientDetail({ client, onBack, isNew }) {
         ]);
     };
 
+    const classifyBmi = (bmi, age, gender) => {
+        const ageNum = Number(age);
+        const isElderly = Number.isFinite(ageNum) && ageNum > 65;
+
+        if (isElderly) {
+            const obesityThreshold = gender === "M" ? 30 : gender === "F" ? 32 : 30;
+
+            if (bmi > obesityThreshold) return "Obesidade";
+            if (bmi > 27) return "Excesso ponderal";
+            if (bmi >= 22) return "Eutrofia";
+            return "Magreza";
+        }
+
+        if (bmi < 16.0) return "Desnutrição Severa";
+        if (bmi < 17.0) return "Desnutrição Moderada";
+        if (bmi < 18.5) return "Baixo peso";
+        if (bmi < 25.0) return "Eutrofia";
+        if (bmi < 30.0) return "Excesso peso";
+        if (bmi < 35.0) return "Obesidade classe I";
+        if (bmi < 40.0) return "Obesidade Classe II";
+        return "Obesidade Classe III";
+    };
+
     const updateAnthropometricRow = (id, field, value) => {
         setAnthropometricData((prev) =>
             prev.map((row) => {
                 if (row.id !== id) return row;
+
                 const updated = { ...row, [field]: value };
-                if ((field === "weight" || field === "height") && updated.weight && updated.height) {
-                    const h = parseFloat(updated.height) / 100;
-                    if (h > 0) updated.bmi = (parseFloat(updated.weight) / (h * h)).toFixed(1);
+
+                if (field === "weight" || field === "height") {
+                    const w = parseFloat(updated.weight);
+                    const hCm = parseFloat(updated.height);
+
+                    if (!Number.isFinite(w) || !Number.isFinite(hCm) || hCm <= 0) {
+                        updated.bmi = "";
+                        updated.bmiClass = "";
+                        return updated;
+                    }
+
+                    const h = hCm / 100;
+                    const bmiNum = w / (h * h);
+
+                    updated.bmi = bmiNum.toFixed(1);
+                    updated.bmiClass = classifyBmi(bmiNum, form.age, form.gender);
                 }
+
                 return updated;
             })
         );
+    };
+
+    const latestHeight = React.useMemo(() => {
+        const sorted = [...anthropometricData]
+            .filter((r) => r.height && r.date)
+            .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+        return sorted.length > 0 ? parseFloat(sorted[0].height) : NaN;
+    }, [anthropometricData]);
+
+    const latestWeight = React.useMemo(() => {
+        const sorted = [...anthropometricData]
+            .filter((r) => r.weight && r.date)
+            .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+        return sorted.length > 0 ? parseFloat(sorted[0].weight) : NaN;
+    }, [anthropometricData]);
+
+    const mbCalculator = (heightCm, weightKg, age, gender, type) => {
+        const h = parseFloat(heightCm);
+        const w = parseFloat(weightKg);
+        const a = parseFloat(age);
+        if (!Number.isFinite(h) || !Number.isFinite(w) || !Number.isFinite(a) || !gender) return "";
+
+        if (type === "Harris-Benedict") {
+            if (gender === "M") return Math.round(66.5 + 13.7 * w + 5 * h - 6.8 * a);
+            if (gender === "F") return Math.round(655.1 + 9.56 * w + 1.85 * h - 4.7 * a);
+        }
+
+        if (type === "Mifflin-St Jeor") {
+            if (gender === "M") return Math.round(10 * w + 6.26 * h - 5 * a + 5);
+            if (gender === "F") return Math.round(10 * w + 6.26 * h - 5 * a - 161);
+        }
+
+        if (type === "OMS") {
+            const hM = h / 100;
+            if (a >= 18 && a < 30) {
+                if (gender === "M") return Math.round(64.4 * w - 113 * hM + 3000);
+                if (gender === "F") return Math.round(55.6 * w - 1397.4 * hM + 146);
+            }
+            if (a >= 30 && a < 60) {
+                if (gender === "M") return Math.round(19.2 * w + 66.9 * hM + 3769);
+                if (gender === "F") return Math.round(36.4 * w - 104.6 * hM + 3619);
+            }
+            if (a >= 60) {
+                if (gender === "M") return Math.round(13.5 * w + 487);
+                if (gender === "F") return Math.round(10.5 * w + 596);
+            }
+        }
+
+        if (type === "FAO/WHO") {
+            if (a >= 0 && a < 3) {
+                if (gender === "M") return Math.round(60.9 * w - 54);
+                if (gender === "F") return Math.round(61 * w - 51);
+            }
+            if (a >= 3 && a < 10) {
+                if (gender === "M") return Math.round(22.7 * w + 495);
+                if (gender === "F") return Math.round(22.5 * w + 499);
+            }
+            if (a >= 10 && a < 18) {
+                if (gender === "M") return Math.round(17.5 * w + 651);
+                if (gender === "F") return Math.round(12.2 * w + 746);
+            }
+            if (a >= 18 && a < 30) {
+                if (gender === "M") return Math.round(15.3 * w + 679);
+                if (gender === "F") return Math.round(14.7 * w + 496);
+            }
+            if (a >= 30 && a < 60) {
+                if (gender === "M") return Math.round(11.6 * w + 879);
+                if (gender === "F") return Math.round(8.7 * w + 829);
+            }
+            if (a >= 60) {
+                if (gender === "M") return Math.round(13.5 * w + 487);
+                if (gender === "F") return Math.round(10.5 * w + 596);
+            }
+        }
+
+        return "";
+    };
+
+    const calcWeight = (height, peso, gender, type) => {
+        const h = parseFloat(height);
+        const p = parseFloat(peso);
+        if (!Number.isFinite(h) || !gender) return "";
+
+        if (gender === "M") {
+            const weight = h - 100 - ((h - 150) / 4);
+            if (type === "Healthy") return Math.round(weight * 10) / 10;
+            if (!Number.isFinite(p)) return "";
+            return Math.round((weight + 0.25 * (p - weight)) * 10) / 10;
+        }
+        if (gender === "F") {
+            const weight = h - 100 - ((h - 150) / 2);
+            if (type === "Healthy") return Math.round(weight * 10) / 10;
+            if (!Number.isFinite(p)) return "";
+            return Math.round((weight + 0.25 * (p - weight)) * 10) / 10;
+        }
+        return "";
     };
 
     const removeAnthropometricRow = (id) => {
@@ -388,7 +734,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
     };
 
     const [uploading, setUploading] = React.useState({});
-    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB per file
+    const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
     const addItem = () => {
         setItems((prev) => [...prev, { id: crypto.randomUUID(), text: "", files: [] }]);
@@ -593,6 +939,26 @@ export default function ClientDetail({ client, onBack, isNew }) {
                                 <TextField label="Morada" fullWidth size="small" value={form.address} onChange={handleChange("address")} />
                                 <TextField label="Profissão" fullWidth size="small" value={form.occupation} onChange={handleChange("occupation")} />
                                 <TextField label="Motivo" fullWidth size="small" value={form.motivo} onChange={handleChange("motivo")} multiline rows={3} placeholder="Motivo da consulta..." />
+                                <FormGroup >
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                checked={!!form.isPregnant}
+                                                onChange={handleChange("isPregnant")}
+                                            />
+                                        }
+                                        label="Grávida"
+                                    />
+                                    <FormControlLabel
+                                        control={
+                                            <Checkbox
+                                                checked={!!form.breastFeeding}
+                                                onChange={handleChange("breastFeeding")}
+                                            />
+                                        }
+                                        label="Amamentação"
+                                    />
+                                </FormGroup>
                             </Stack>
                         </Paper>
                     </Grid>
@@ -607,7 +973,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
                                 <Tab label="Alimentar" />
                             </Tabs>
                             <TextField
-                                multiline rows={12} fullWidth
+                                multiline rows={21} fullWidth
                                 placeholder={
                                     historyTab === 0 ? "Histórico pessoal do cliente..."
                                         : historyTab === 1 ? "Histórico clínico do cliente..."
@@ -647,91 +1013,418 @@ export default function ClientDetail({ client, onBack, isNew }) {
                     </Grid>
 
                     {/* ── Necessidades Energéticas ─────────────────────────── */}
-                    <Grid size={{ xs: 12, md: 4 }}>
+                    <Grid size={{ xs: 12 }}>
                         <Paper sx={{ p: 3 }}>
                             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Necessidades Energéticas</Typography>
                             <Stack spacing={2}>
+                                <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                                    <Stack sx={{ flex: 1 }} spacing={2}>
+                                        <TextField
+                                            label="Peso Escolhido (kg)" size="small" fullWidth type="number"
+                                            value={form.chosenWeight}
+                                            onChange={handleChange("chosenWeight")}
+                                        />
+                                        <TextField
+                                            label="Peso Saudável" size="small" fullWidth type="number"
+                                            value={calcWeight(latestHeight, latestWeight, form.gender, "Healthy")}
+                                            InputProps={{ readOnly: true }}
+                                        />
+                                        <TextField
+                                            label="Peso Ajustado" size="small" fullWidth type="number"
+                                            value={calcWeight(latestHeight, latestWeight, form.gender, "Ajusted")}
+                                            InputProps={{ readOnly: true }}
+                                        />
+                                    </Stack>
+                                    <Stack sx={{ flex: 1 }} spacing={2}>
+                                        <TextField
+                                            label="Altura (cm)" size="small" fullWidth
+                                            value={Number.isFinite(latestHeight) ? latestHeight : ""}
+                                            InputProps={{ readOnly: true }}
+                                            helperText="Última medição"
+                                        />
+                                    </Stack>
+
+
+
+                                </Stack>
+
+                                <Typography variant="subtitle2" color="text.secondary">Fórmulas MB (kcal/dia)</Typography>
+                                <Stack direction="row" spacing={4}>
+                                    <TextField
+                                        label="Harris-Benedict" size="small" fullWidth
+                                        value={mbCalculator(latestHeight, form.chosenWeight, form.age, form.gender, "Harris-Benedict")}
+                                        InputProps={{ readOnly: true }}
+                                    />
+                                    <TextField
+                                        label="Mifflin-St Jeor" size="small" fullWidth
+                                        value={mbCalculator(latestHeight, form.chosenWeight, form.age, form.gender, "Mifflin-St Jeor")}
+                                        InputProps={{ readOnly: true }}
+                                    />
+                                    <TextField
+                                        label="OMS" size="small" fullWidth
+                                        value={mbCalculator(latestHeight, form.chosenWeight, form.age, form.gender, "OMS")}
+                                        InputProps={{ readOnly: true }}
+                                    />
+                                    <TextField
+                                        label="FAO/WHO" size="small" fullWidth
+                                        value={mbCalculator(latestHeight, form.chosenWeight, form.age, form.gender, "FAO/WHO")}
+                                        InputProps={{ readOnly: true }}
+                                    />
+                                </Stack>
                                 <TextField
-                                    label="Metabolismo Basal (kcal)" size="small" fullWidth type="number"
-                                    value={energyNeeds.basalMetabolism}
-                                    onChange={(e) => setEnergyNeeds((p) => ({ ...p, basalMetabolism: e.target.value }))}
-                                />
+                                    label="MB Escolhido (kcal)" size="small" fullWidth select
+                                    value={form.chosenMB}
+                                    onChange={handleChange("chosenMB")}
+                                    helperText="Escolha o valor de uma das fórmulas acima"
+                                >
+                                    <MenuItem value="">-</MenuItem>
+                                    {[
+                                        { label: "Harris-Benedict", type: "Harris-Benedict" },
+                                        { label: "Mifflin-St Jeor", type: "Mifflin-St Jeor" },
+                                        { label: "OMS", type: "OMS" },
+                                        { label: "FAO/WHO", type: "FAO/WHO" },
+                                    ].map(({ label, type }) => {
+                                        const val = mbCalculator(latestHeight, form.chosenWeight, form.age, form.gender, type);
+                                        return val ? (
+                                            <MenuItem key={type} value={String(val)}>
+                                                {label}: {val} kcal
+                                            </MenuItem>
+                                        ) : null;
+                                    })}
+                                </TextField>
+                                <Stack spacing={2} direction="row">
+                                    <FactorPicker
+                                        title="Actividade física"
+                                        options={ACTIVIDADE_FISICA}
+                                        selectedId={activity.selectedId}
+                                        value={activity.value}
+                                        onChange={({ selectedId, value }) => setActivity({ selectedId, value })}
+                                    />
+                                    <FactorPicker
+                                        title="Factor de Stress"
+                                        options={FACTOR_STRESS}
+                                        selectedId={stress.selectedId}
+                                        value={stress.value}
+                                        onChange={({ selectedId, value }) => setStress({ selectedId, value })}
+                                    />
+                                    <FactorPicker
+                                        title="Factor Térmico"
+                                        options={FACTOR_TERMICO}
+                                        selectedId={temp.selectedId}
+                                        value={temp.value}
+                                        onChange={({ selectedId, value }) => setTemp({ selectedId, value })}
+                                    />
+                                </Stack>
+                                <Stack direction="row" spacing={2}>
+                                    <FactorPicker
+                                        title="Factor de Agressão"
+                                        options={FACTOR_AGRESSAO}
+                                        selectedId={aggression.selectedId}
+                                        value={aggression.value}
+                                        onChange={({ selectedId, value }) => setAggression({ selectedId, value })}
+                                    />
+                                    <FactorPicker
+                                        title="Factor Anabólico"
+                                        options={FACTOR_ANABOLICO}
+                                        selectedId={ana.selectedId}
+                                        value={ana.value}
+                                        onChange={({ selectedId, value }) => setAna({ selectedId, value })}
+                                    />
+                                </Stack>
+                                {/* ── NET (MB × Fator Atividade) ──────────────── */}
+                                <Divider sx={{ my: 1 }} />
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                    NET (Metabolismo Basal × Fator Atividade)
+                                </Typography>
+                                <Stack direction="row" spacing={2}>
+                                    <TextField
+                                        label="Fator Atividade" size="small"
+                                        value={activityFactor}
+                                        InputProps={{ readOnly: true }}
+                                        sx={{ width: 160 }}
+                                    />
+                                    <TextField
+                                        label="NET (kcal)" size="small" fullWidth
+                                        value={netSimple()}
+                                        InputProps={{ readOnly: true }}
+                                    />
+                                </Stack>
+
+                                {/* ── NET Food and Nutrition Board ───────────── */}
+                                <Divider sx={{ my: 1 }} />
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                    NET (Food and Nutrition Board, Institute of Medicine)
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                </Typography>
+                                <TableContainer>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell sx={{ fontWeight: 700 }}>Idade</TableCell>
+                                                <TableCell sx={{ fontWeight: 700 }}>Masculino</TableCell>
+                                                <TableCell sx={{ fontWeight: 700 }}>Feminino</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {[
+                                                { label: "1-3 Anos", key: "1-3" },
+                                                { label: "3-8 Anos", key: "3-8" },
+                                                { label: "9-18 Anos", key: "9-18" },
+                                                { label: ">19 Anos", key: "19+" },
+                                            ].map((row) => {
+                                                const vals = netFNB(row.key);
+                                                return (
+                                                    <TableRow key={row.key}>
+                                                        <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>{row.label}</TableCell>
+                                                        <TableCell>{vals.M}</TableCell>
+                                                        <TableCell>{vals.F}</TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+
+                                {/* ── NET Infância ────────────────────────────── */}
+                                {form.age < 3 && (
+                                    <>
+                                        <Divider sx={{ my: 1 }} />
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                            NET Infância
+                                        </Typography>
+                                        <Stack spacing={1}>
+                                            {[
+                                                { label: "0-3 Meses", key: "0-3" },
+                                                { label: "4-6 Meses", key: "4-6" },
+                                                { label: "7-12 Meses", key: "7-12" },
+                                                { label: "13-35 Meses", key: "13-35" },
+                                            ].map((row) => (
+                                                <Stack key={row.key} direction="row" spacing={2} alignItems="center">
+                                                    <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 100, whiteSpace: "nowrap" }}>
+                                                        {row.label}
+                                                    </Typography>
+                                                    <TextField
+                                                        size="small" fullWidth
+                                                        value={netInfancia(row.key)}
+                                                        InputProps={{ readOnly: true }}
+                                                    />
+                                                </Stack>
+                                            ))}
+                                        </Stack>
+                                    </>
+                                )}
+
+                                {/* ── NET Grávidas ──────── */}
+                                {form.isPregnant && (
+                                    <>
+                                        <Divider sx={{ my: 1 }} />
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                            NET Grávidas
+                                        </Typography>
+                                        <Stack spacing={1}>
+                                            {[
+                                                { label: "1º Trimestre", tri: 1 },
+                                                { label: "2º Trimestre", tri: 2 },
+                                                { label: "3º Trimestre", tri: 3 },
+                                            ].map((row) => (
+                                                <Stack key={row.tri} direction="row" spacing={2} alignItems="center">
+                                                    <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 100, whiteSpace: "nowrap" }}>
+                                                        {row.label}
+                                                    </Typography>
+                                                    <TextField
+                                                        size="small" fullWidth
+                                                        value={netGravidas(row.tri)}
+                                                        InputProps={{ readOnly: true }}
+                                                    />
+                                                </Stack>
+                                            ))}
+                                        </Stack>
+                                    </>
+                                )}
+
+                                {/* ── NET Amamentação ── */}
+                                {form.breastFeeding && (
+                                    <>
+                                        <Divider sx={{ my: 1 }} />
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                            NET Amamentação
+                                        </Typography>
+                                        <Stack spacing={1}>
+                                            {[
+                                                { label: "1º Semestre", sem: 1 },
+                                                { label: "2º Semestre", sem: 2 },
+                                            ].map((row) => (
+                                                <Stack key={row.sem} direction="row" spacing={2} alignItems="center">
+                                                    <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 100, whiteSpace: "nowrap" }}>
+                                                        {row.label}
+                                                    </Typography>
+                                                    <TextField
+                                                        size="small" fullWidth
+                                                        value={netAmamentacao(row.sem)}
+                                                        InputProps={{ readOnly: true }}
+                                                    />
+                                                </Stack>
+                                            ))}
+                                        </Stack>
+                                    </>
+                                )}
+
+                                {/* ── NET Indivíduos Doentes ──────────────────── */}
+                                <Divider sx={{ my: 1 }} />
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                    NET Indivíduos Doentes
+                                </Typography>
+                                <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+                                    <TextField label="F. Actividade" size="small" value={activityFactor} InputProps={{ readOnly: true }} sx={{ width: 120 }} />
+                                    <TextField label="F. Stress" size="small" value={stressFactor} InputProps={{ readOnly: true }} sx={{ width: 120 }} />
+                                    <TextField label="F. Térmico" size="small" value={tempFactor} InputProps={{ readOnly: true }} sx={{ width: 120 }} />
+                                    <TextField label="F. Agressão" size="small" value={aggressionFactor} InputProps={{ readOnly: true }} sx={{ width: 120 }} />
+                                    <TextField label="F. Anabólico" size="small" value={anaFactor} InputProps={{ readOnly: true }} sx={{ width: 120 }} />
+                                </Stack>
                                 <TextField
-                                    label="Fator de Atividade" size="small" fullWidth type="number"
-                                    value={energyNeeds.activityFactor}
-                                    onChange={(e) => setEnergyNeeds((p) => ({ ...p, activityFactor: e.target.value }))}
-                                    inputProps={{ step: 0.1, min: 1, max: 3 }}
-                                    helperText="1.2 Sedentário / 1.55 Moderado / 1.9 Muito ativo"
+                                    label="NET Doentes (kcal)" size="small" fullWidth
+                                    value={netDoentes()}
+                                    InputProps={{ readOnly: true }}
                                 />
-                                <TextField
-                                    label="Necessidade Energética Total (kcal)" size="small" fullWidth type="number"
-                                    value={energyNeeds.totalEnergy}
-                                    onChange={(e) => setEnergyNeeds((p) => ({ ...p, totalEnergy: e.target.value }))}
-                                />
+
+                                <Divider sx={{ my: 1 }} />
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                    NET (Regra Prática)
+                                </Typography>
+                                <Stack direction="row" spacing={2}>
+                                    <TextField
+                                        label="Valor a Multiplicar" size="small" fullWidth type="number"
+                                        value={form.vM}
+                                        onChange={handleChange("vM")}
+                                    />
+                                    <TextField
+                                        label="NET (kcal)" size="small" fullWidth
+                                        value={netPrat()}
+                                        InputProps={{ readOnly: true }}
+                                    />
+
+                                    <Image
+                                        src="/Images/Picture1.png"
+                                        alt="Teresa"
+                                        width={3000}
+                                        height={100}
+                                        style={{ borderRadius: "8px", objectFit: "cover" }}
+                                    />
+                                </Stack>
+
+                                <Divider sx={{ my: 1 }} />
+
                             </Stack>
                         </Paper>
                     </Grid>
 
-                    {/* ── Necessidades Hídricas ────────────────────────────── */}
-                    <Grid size={{ xs: 12, md: 4 }}>
+                    <Grid size={{ xs: 12 }}>
                         <Paper sx={{ p: 3 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Necessidades Hídricas</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Fórmula Dietética</Typography>
                             <Stack spacing={2}>
                                 <TextField
-                                    label="Base por peso (ml/kg)" size="small" fullWidth type="number"
-                                    value={hydrationNeeds.weightBased}
-                                    onChange={(e) => setHydrationNeeds((p) => ({ ...p, weightBased: e.target.value }))}
-                                    helperText="Geralmente 30-35 ml/kg"
+                                    label="NET Escolhida" size="small" fullWidth
+                                    value={form.chosenNET}
+                                    onChange={handleChange("chosenNET")}
+                                    helperText="Escolha o valor de uma das fórmulas acima"
                                 />
-                                <TextField
-                                    label="Total Hídrico (ml)" size="small" fullWidth type="number"
-                                    value={hydrationNeeds.total}
-                                    onChange={(e) => setHydrationNeeds((p) => ({ ...p, total: e.target.value }))}
+
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                    Fórmula Dietética por percentagens
+                                </Typography>
+
+                                <MacroSlider
+                                    proteinPct={dietPct.proteinPct}
+                                    glucidPct={dietPct.glucidPct}
+                                    lipidPct={dietPct.lipidPct}
+                                    onChange={handleSliderChange}
+                                    net={form.chosenNET}
+                                    weight={form.chosenWeight}
                                 />
+
+                                <TableContainer>
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell sx={{ fontWeight: 700 }}></TableCell>
+                                                <TableCell sx={{ fontWeight: 700 }}>g</TableCell>
+                                                <TableCell sx={{ fontWeight: 700 }}>kcal</TableCell>
+                                                <TableCell sx={{ fontWeight: 700 }}>(%)</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {[
+                                                { label: "Proteínas", key: "Proteinas" },
+                                                { label: "Lípidos", key: "Lipidos" },
+                                                { label: "SFA máx 10%", key: "SFA", indent: true },
+                                                { label: "PUFA máx 10%", key: "PUFA", indent: true },
+                                                { label: "MUFA máx 20%", key: "MUFA", indent: true },
+                                                { label: "Glícidos", key: "Glicidos" },
+                                                { label: "Açúcares Simples", key: "Acucares", indent: true, pctEditable: true },
+                                                { label: "Fibra 14g/1000kcal", key: "Fibra" },
+                                            ].map((row) => {
+                                                const vals = dietCalc(row.key);
+                                                return (
+                                                    <TableRow key={row.key}>
+                                                        <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap", pl: row.indent ? 4 : 2 }}>
+                                                            {row.label}
+                                                        </TableCell>
+                                                        <TableCell>{vals.g}</TableCell>
+                                                        <TableCell>{vals.kcal}</TableCell>
+                                                        <TableCell>
+                                                            {row.pctEditable ? (
+                                                                <TextField
+                                                                    size="small" variant="standard" type="number"
+                                                                    value={dietPct.sugarPct}
+                                                                    onChange={(e) => setDietPct((prev) => ({ ...prev, sugarPct: e.target.value }))}
+                                                                    sx={{ width: 70 }}
+                                                                    inputProps={{ step: 0.5, min: 0, max: 100 }}
+                                                                />
+
+                                                            ) : (
+                                                                <Typography variant="body2">
+                                                                    {vals.pct !== "" ? `${vals.pct}%` : ""}
+                                                                </Typography>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+
+                                {/* ── Aporte Hídrico ──────────────────────── */}
+                                <Divider sx={{ my: 1 }} />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                    Aporte Hídrico (1–1,5 ml/kcal)
+                                </Typography>
+                                <Stack direction="row" spacing={2} alignItems="center">
+                                    <TextField
+                                        label="ml/kcal" size="small" type="number"
+                                        value={dietPct.hidricoFactor}
+                                        onChange={(e) => setDietPct((prev) => ({ ...prev, hidricoFactor: e.target.value }))}
+                                        inputProps={{ step: 0.1, min: 1, max: 1.5 }}
+                                        sx={{ width: 120 }}
+                                    />
+                                    <TextField
+                                        label="Total (ml)" size="small" fullWidth
+                                        value={(() => {
+                                            const net = parseFloat(form.chosenNET);
+                                            const f = parseFloat(dietPct.hidricoFactor);
+                                            if (!Number.isFinite(net) || !Number.isFinite(f)) return "";
+                                            return Math.round(f * net);
+                                        })()}
+                                        InputProps={{ readOnly: true }}
+                                    />
+                                </Stack>
+
+
                             </Stack>
                         </Paper>
                     </Grid>
 
-                    {/* ── Distribuição dos Macronutrientes ─────────────────── */}
-                    <Grid size={{ xs: 12, md: 4 }}>
-                        <Paper sx={{ p: 3 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Distribuição dos Macronutrientes</Typography>
-                            <Stack spacing={2}>
-                                <Typography variant="subtitle2" color="text.secondary">Proteínas (4 kcal/g)</Typography>
-                                <Stack direction="row" spacing={1}>
-                                    <TextField
-                                        label="%" size="small" type="number" sx={{ width: 80 }}
-                                        value={macroDistribution.proteinPct}
-                                        onChange={(e) => setMacroDistribution((p) => ({ ...p, proteinPct: e.target.value }))}
-                                    />
-                                    <TextField label="g" size="small" value={macroDistribution.proteinGrams} InputProps={{ readOnly: true }} sx={{ flex: 1 }} />
-                                    <TextField label="kcal" size="small" value={macroDistribution.proteinKcal} InputProps={{ readOnly: true }} sx={{ flex: 1 }} />
-                                </Stack>
-
-                                <Typography variant="subtitle2" color="text.secondary">Hidratos de Carbono (4 kcal/g)</Typography>
-                                <Stack direction="row" spacing={1}>
-                                    <TextField
-                                        label="%" size="small" type="number" sx={{ width: 80 }}
-                                        value={macroDistribution.carbsPct}
-                                        onChange={(e) => setMacroDistribution((p) => ({ ...p, carbsPct: e.target.value }))}
-                                    />
-                                    <TextField label="g" size="small" value={macroDistribution.carbsGrams} InputProps={{ readOnly: true }} sx={{ flex: 1 }} />
-                                    <TextField label="kcal" size="small" value={macroDistribution.carbsKcal} InputProps={{ readOnly: true }} sx={{ flex: 1 }} />
-                                </Stack>
-
-                                <Typography variant="subtitle2" color="text.secondary">Lípidos (9 kcal/g)</Typography>
-                                <Stack direction="row" spacing={1}>
-                                    <TextField
-                                        label="%" size="small" type="number" sx={{ width: 80 }}
-                                        value={macroDistribution.fatPct}
-                                        onChange={(e) => setMacroDistribution((p) => ({ ...p, fatPct: e.target.value }))}
-                                    />
-                                    <TextField label="g" size="small" value={macroDistribution.fatGrams} InputProps={{ readOnly: true }} sx={{ flex: 1 }} />
-                                    <TextField label="kcal" size="small" value={macroDistribution.fatKcal} InputProps={{ readOnly: true }} sx={{ flex: 1 }} />
-                                </Stack>
-                            </Stack>
-                        </Paper>
-                    </Grid>
 
                     {/* ── Items / Additional Notes ─────────────────────────── */}
                     <Grid size={{ xs: 12 }}>
@@ -808,7 +1501,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
-        </Box>
+        </Box >
     );
 }
 
@@ -935,7 +1628,15 @@ function AnthroTable({ data, onUpdate, onRemove }) {
                             </TableCell>
                             {ALL_TABLE_FIELDS.map((f) => (
                                 <TableCell key={f.key}>
-                                    <TextField size="small" variant="standard" type="number" value={row[f.key] ?? ""} onChange={(e) => onUpdate(row.id, f.key, e.target.value)} disabled={!!f.disabled} sx={{ width: 70 }} />
+                                    <TextField
+                                        size="small"
+                                        variant="standard"
+                                        type={f.key === "bmiClass" ? "text" : "number"}
+                                        value={row[f.key] ?? ""}
+                                        onChange={(e) => onUpdate(row.id, f.key, e.target.value)}
+                                        disabled={!!f.disabled}
+                                        sx={{ width: f.key === "bmiClass" ? 160 : 70 }}
+                                    />
                                 </TableCell>
                             ))}
                             <TableCell>

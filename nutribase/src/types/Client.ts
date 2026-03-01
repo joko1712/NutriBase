@@ -8,6 +8,10 @@ export interface Client {
     email: string;
     address: string;
     occupation: string;
+    chosenWeight: number;
+    chosenMB: number;
+    chosenNET: number; 
+    vM: number;
     lastConsultation: string;
     personalHistory: string;
     clinicalHistory: string;
@@ -23,6 +27,7 @@ export interface AnthropometricEntry {
     weight: number;
     height: number;
     bmi: number;
+    bmiClass: string;
     // Composição Corporal
     bodyFat: number;
     muscleMass: number;
@@ -59,6 +64,10 @@ export const emptyClient: Client = {
     email: "",
     address: "",
     occupation: "",
+    chosenWeight: 0,
+    chosenNET:0,
+    vM:0,
+    chosenMB: 0,
     lastConsultation: "",
     personalHistory: "",
     clinicalHistory: "",
