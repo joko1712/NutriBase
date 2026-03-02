@@ -65,6 +65,7 @@ import dayjs from 'dayjs';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { FactorPicker } from "./FactorPicker";
 import { MacroSlider } from "./MacroSlider";
+import { MealPlan } from "./MealPlan";
 import Image from "next/image";
 const CHART_GROUPS = [
     {
@@ -239,6 +240,8 @@ export default function ClientDetail({ client, onBack, isNew }) {
         carbsPct: "", carbsGrams: "", carbsKcal: "",
         fatPct: "", fatGrams: "", fatKcal: "",
     });
+
+    const [mealPlan, setMealPlan] = React.useState(client?.mealPlan || []);
 
     const [saving, setSaving] = React.useState(false);
     const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
@@ -516,6 +519,7 @@ export default function ClientDetail({ client, onBack, isNew }) {
                 macroDistribution,
                 factors: { activity, stress, temp, aggression, ana },
                 dietPct,
+                mealPlan,
                 lastVisit: new Date().toISOString().split("T")[0],
             };
 
@@ -1425,6 +1429,21 @@ export default function ClientDetail({ client, onBack, isNew }) {
                         </Paper>
                     </Grid>
 
+
+                    {/* ── Plano Alimentar ─────────────────────────────────── */}
+                    <Grid size={{ xs: 12 }}>
+                        <Paper sx={{ p: 3 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>Plano Alimentar</Typography>
+                            <MealPlan
+                                meals={mealPlan}
+                                onChange={setMealPlan}
+                                net={form.chosenNET}
+                                proteinG={parseFloat(dietCalc("Proteinas").g)}
+                                glucidG={parseFloat(dietCalc("Glicidos").g)}
+                                lipidG={parseFloat(dietCalc("Lipidos").g)}
+                            />
+                        </Paper>
+                    </Grid>
 
                     {/* ── Items / Additional Notes ─────────────────────────── */}
                     <Grid size={{ xs: 12 }}>
