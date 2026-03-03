@@ -25,6 +25,12 @@ import "dayjs/locale/pt-br";
 import dayjs from "dayjs";
 import { db } from "../firebase-config";
 import { collection, addDoc, serverTimestamp, doc, getDoc, setDoc } from "firebase/firestore";
+import emailjs from "@emailjs/browser";
+
+const EMAILJS_SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || "";
+const EMAILJS_CONFIRM_TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_CONFIRM_TEMPLATE_ID || "";
+const EMAILJS_PUBLIC_KEY = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || "";
+const MBWAY_PHONE = process.env.MBWAYPHONE;
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import NativeSelect from "@mui/material/NativeSelect";
@@ -202,6 +208,24 @@ export default function AgendarConsulta() {
             const blockedSet = new Set([...dateSlots, ...slotsToBlock]);
             const updated = [...blockedSet].sort();
             await setDoc(settingsRef, { ...data, [bookedDate]: updated });
+
+            if (EMAILJS_SERVICE_ID && EMAILJS_CONFIRM_TEMPLATE_ID && EMAILJS_PUBLIC_KEY) {
+                const price = tipoConsulta.includes("avulso") ? "60€" : "220€";
+                emailjs.send(
+                    EMAILJS_SERVICE_ID,
+                    EMAILJS_CONFIRM_TEMPLATE_ID,
+                    {
+                        to_email: email.trim(),
+                        to_name: name.trim(),
+                        date: selectedDate.format("DD/MM/YYYY"),
+                        time: selectedTime,
+                        tipo_consulta: tipoConsulta,
+                        price: price,
+                        mbway_phone: MBWAY_PHONE,
+                    },
+                    { publicKey: EMAILJS_PUBLIC_KEY }
+                ).catch((err) => console.error("EmailJS booking email error:", err));
+            }
 
             setStep(3);
         } catch (err) {

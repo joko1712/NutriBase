@@ -347,8 +347,6 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                         severity: "warning",
                     });
                 }
-
-                sendBookingEmail(updated, EMAILJS_CONFIRM_TEMPLATE_ID);
             }
         } catch (error) {
             console.error("Error confirming booking:", error);
