@@ -211,6 +211,7 @@ export default function AgendarConsulta() {
 
             if (EMAILJS_SERVICE_ID && EMAILJS_CONFIRM_TEMPLATE_ID && EMAILJS_PUBLIC_KEY) {
                 const price = tipoConsulta.includes("avulso") ? "60€" : "220€";
+                const titulo = tipoConsulta.includes("avulso") ? "Consulta de nutrição avulso" : "Pack de 4 consultas de nutrição"
                 emailjs.send(
                     EMAILJS_SERVICE_ID,
                     EMAILJS_CONFIRM_TEMPLATE_ID,
@@ -219,7 +220,7 @@ export default function AgendarConsulta() {
                         to_name: name.trim(),
                         date: selectedDate.format("DD/MM/YYYY"),
                         time: selectedTime,
-                        tipo_consulta: tipoConsulta,
+                        tipo_consulta: titulo,
                         price: price,
                         mbway_phone: MBWAY_PHONE,
                     },
