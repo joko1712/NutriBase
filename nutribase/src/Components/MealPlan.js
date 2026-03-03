@@ -103,6 +103,7 @@ export function MealPlan({ meals, onChange, net, proteinG, glucidG, lipidG }) {
                                             onChange={(e) => updateMeal(meal.id, "ref", e.target.value)}
                                             sx={{ width: 90 }}
                                             inputProps={{ style: { fontSize: 13 } }}
+                                            disabled
                                         />
                                     </TableCell>
                                     <TableCell sx={cellSx}>

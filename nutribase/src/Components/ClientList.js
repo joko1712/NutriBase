@@ -37,6 +37,7 @@ import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import PersonSearchIcon from "@mui/icons-material/PersonSearch";
+import RestaurantMenuIcon from "@mui/icons-material/RestaurantMenu";
 import Tooltip from "@mui/material/Tooltip";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase-config";
@@ -88,7 +89,7 @@ const STATUS_CONFIG = {
     cancelled: { label: "Cancelada", color: "error" },
 };
 
-export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFromBooking, onAvailability }) {
+export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFromBooking, onAvailability, onProducts }) {
     const [clients, setClients] = React.useState([]);
     const [searchQuery, setSearchQuery] = React.useState("");
     const [estab, setEstab] = React.useState("any");
@@ -649,6 +650,11 @@ export default function ClientsPage({ onSelectClient, onNewClient, onNewClientFr
                     <Tooltip title="Copiar link de marcação">
                         <IconButton size="small" sx={{ color: "white" }} onClick={handleCopyBookingLink}>
                             <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Produtos">
+                        <IconButton size="small" sx={{ color: "white" }} onClick={onProducts}>
+                            <RestaurantMenuIcon fontSize="small" />
                         </IconButton>
                     </Tooltip>
                     <Tooltip title="Disponibilidade">
